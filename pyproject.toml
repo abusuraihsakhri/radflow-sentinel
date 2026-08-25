@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "radflow-sentinel"
+version = "1.0.0"
+description = "Autonomous Radiology Critical Finding Escalation & Incidentaloma Tracking Engine System."
+readme = "README.md"
+authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
+license = { text = "MIT" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+radflow = "radflow.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/abusuraihsakhri/radflow-sentinel"
+Repository = "https://github.com/abusuraihsakhri/radflow-sentinel.git"

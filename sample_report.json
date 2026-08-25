@@ -1,0 +1,10 @@
+{
+  "report_id": "RAD-2026-9041",
+  "accession_number": "ACC-5521",
+  "patient_id": "PT-RAD-3312",
+  "exam_type": "CT Chest with IV Contrast (PE Protocol)",
+  "findings_text": "Large occlusive filling defect identified within the main right pulmonary artery extending into the right interlobar artery. Right ventricular to left ventricular diameter ratio is 1.2, suggesting acute right heart strain. Additionally, an incidental 7 mm solid non-calcified nodule is noted in the right upper lobe (Series 3, Image 44).",
+  "impression_text": "1. ACUTE PULMONARY EMBOLISM involving right main and lobar branches with CT evidence of right heart strain.\n2. Incidental 7 mm solid right upper lobe pulmonary nodule.",
+  "patient_egfr": 48.0,
+  "ordering_provider": "Dr. Sarah Jenkins (Emergency Medicine)"
+}
