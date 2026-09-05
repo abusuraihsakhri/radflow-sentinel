@@ -7,8 +7,9 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import math
 import pytest
-from agents.base import PHIGuard, AuditLogger, SecurityException
+from agents.base import PHIGuard, AuditLogger, AuditTrail, SecurityException
 from agents.models import SystemTaskPayload, UrgencyLevel, SystemIntegrityStatus
 from agents.workers import InvariantQCWorker, SafetyEscalationWorker, ProtocolConformanceWorker
 from agents.supervisor import SystemSupervisor
@@ -63,3 +64,86 @@ def test_supervisor_consensus_and_audit():
     assert main(["audit", "--task-id", "CLI-TEST-01"]) == 0
     assert main(["chat", "Explain", "specifications"]) == 0
     assert main(["verify-audit"]) == 0
+
+
+def test_nan_infinity_rejection():
+    """Security: NaN and Infinity values must be rejected."""
+    with pytest.raises(Exception):
+        SystemTaskPayload(task_id="T-NAN", target_identifier="K1", primary_metric=math.nan)
+    with pytest.raises(Exception):
+        SystemTaskPayload(task_id="T-INF", target_identifier="K1", primary_metric=math.inf)
+    with pytest.raises(Exception):
+        SystemTaskPayload(timeout="T-INF", target_identifier="K1", primary_metric=1.0, secondary_metric=-math.inf)
+
+
+def test_batch_csv_boolean_parsing():
+    """Security: Batch CSV boolean parsing must handle string values correctly."""
+    import tempfile
+    import os
+    import csv
+
+    # Create a test CSV with various boolean representations
+    test_csv = "task_id,target_identifier,primary_metric,secondary_metric,status_descriptor,is_critical_flag\n"
+    test_csv += "T1,K1,10.0,5.0,NOMINAL,false\n"
+    test_csv += "T2,K2,10.0,5.0,NOMINAL,0\n"
+    test_csv += "T3,K3,10.0,5.0,NOMINAL,no\n"
+    test_csv += "T4,K4,10.0,5.0,NOMINAL,true\n"
+    test_csv += "T5,K5,10.0,5.0,NOMINAL,1\n"
+    test_csv += "T6,K6,10.0,5.0,NOMINAL,yes\n"
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False, newline='') as f:
+        f.write(test_csv)
+        input_path = f.name
+
+    output_path = input_path + '.out.csv'
+
+    try:
+        result = main(["batch", "-i", input_path, "-o", output_path])
+        assert result == 0
+
+        with open(output_path, 'r') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+
+        assert len(rows) == 6
+        # "false", "0", "no" should NOT be critical
+        assert rows[0]["overall_urgency"] == "ROUTINE"
+        assert rows[1]["overall_urgency"] == "ROUTINE"
+        assert rows[2]["overall_urgency"] == "ROUTINE"
+        # "true", "1", "yes" SHOULD be critical (secondary_metric=5.0 < 12.0 but is_critical_flag=True triggers SafetyEscalationWorker)
+        assert rows[3]["overall_urgency"] == "CRITICAL_STAT_PANIC"
+        assert rows[4]["overall_urgency"] == "CRITICAL_STAT_PANIC"
+        assert rows[5]["overall_urgency"] == "CRITICAL_STAT_PANIC"
+    finally:
+        os.unlink(input_path)
+        if os.path.exists(output_path):
+            os.unlink(output_path)
+
+
+def test_audit_trail_uses_random_key_by_default():
+    """Security: AuditTrail should generate a random key when no secret is provided."""
+    import os
+    # Ensure env var is not set
+    old_key = os.environ.pop("AUDIT_SECRET_KEY", None)
+    try:
+        trail = AuditTrail()
+        # Key should be 32 bytes (256 bits) when randomly generated
+        assert len(trail.secret_key) == 32
+    finally:
+        if old_key:
+            os.environ["AUDIT_SECRET_KEY"] = old_key
+
+
+def test_audit_trail_uses_env_var_when_set():
+    """Security: AuditTrail should use AUDIT_SECRET_KEY env var when set."""
+    import os
+    old_key = os.environ.get("AUDIT_SECRET_KEY")
+    os.environ["AUDIT_SECRET_KEY"] = "test-secret-key-12345"
+    try:
+        trail = AuditTrail()
+        assert trail.secret_key == b"test-secret-key-12345"
+    finally:
+        if old_key is None:
+            os.environ.pop("AUDIT_SECRET_KEY", None)
+        else:
+            os.environ["AUDIT_SECRET_KEY"] = old_key

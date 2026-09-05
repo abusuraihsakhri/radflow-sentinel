@@ -88,13 +88,16 @@ def main(argv=None):
         out_fields = fieldnames + ["overall_urgency", "integrity_status", "total_alerts", "audit_hash"]
         out_rows = []
         for r in rows:
+            # Properly parse boolean from string (handles "false", "0", "no", etc.)
+            raw_flag = r.get("is_critical_flag", "").strip().lower()
+            is_critical = raw_flag in ("true", "1", "yes", "y")
             payload = SystemTaskPayload(
                 task_id=r.get("task_id", "TASK-01"),
                 target_identifier=r.get("target_identifier", "TARGET-01"),
                 primary_metric=float(r.get("primary_metric", 15.0)),
                 secondary_metric=float(r.get("secondary_metric", 5.0)),
                 status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
+                is_critical_flag=is_critical,
             )
             dossier = supervisor.process_task(payload)
             row_dict = dict(r)
