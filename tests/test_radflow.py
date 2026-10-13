@@ -149,3 +149,13 @@ def test_radiology_api_bearer_authorization(monkeypatch):
             headers={"Authorization": "Bearer local-test-token"},
         )
         assert response.status_code == 200
+
+def test_report_rejects_invalid_egfr():
+    import math
+    for invalid in [-1, 201, math.inf, math.nan, "unknown"]:
+        with pytest.raises(ValueError):
+            RadiologyReport(
+                report_id="E-1", accession_number="A-1", patient_id="P-1",
+                exam_type="CT with IV Contrast", findings_text="", impression_text="",
+                patient_egfr=invalid,
+            )
