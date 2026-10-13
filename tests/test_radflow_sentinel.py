@@ -165,3 +165,19 @@ def test_audit_rejects_phi_in_signed_fields():
     trail = AuditTrail(secret_key="test-only-secret")
     with pytest.raises(SecurityException):
         trail.log("Patient MRN-995577", "supervisor", "AUDIT", {})
+
+def test_generic_api_bearer_authorization(monkeypatch):
+    from fastapi.testclient import TestClient
+    from agents.api import app
+
+    monkeypatch.setenv("RADFLOW_API_TOKEN", "local-test-token")
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        req = {"task_id": "T-API", "target_identifier": "TARGET-API", "primary_metric": 3.0}
+        assert client.post("/api/audit", json=req).status_code == 401
+        response = client.post(
+            "/api/audit", json=req,
+            headers={"Authorization": "Bearer local-test-token"},
+        )
+        assert response.status_code == 200
+        assert response.json()["overall_urgency"] == "ROUTINE"
