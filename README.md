@@ -1,176 +1,83 @@
 # Radflow Sentinel
 
-> **Domain:** Diagnostic Radiology & Medical Imaging AI
-> **Reference Guidelines & Standards:** `American College of Radiology (ACR) RADS & Fleischner Society`
+Experimental radiology-report screening and deterministic task-audit utilities, with a separate browser-only demonstrator.
 
-<div align="center">
+**Research prototype; not validated for clinical use.** Do not enter identifiable patient information or use outputs for diagnosis, treatment, or clinical follow-up decisions.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
+## Components
 
-</div>
+| Component | Interface | Behavior |
+| --- | --- | --- |
+| Radiology screening (radflow/) | Python CLI; optional FastAPI | Keyword screening for selected critical findings, pulmonary nodule follow-up suggestions, low-eGFR contrast protocol review |
+| Generic task evaluator (agents/) | Python CLI; optional FastAPI | Three deterministic demonstration workers using fixed numeric and keyword thresholds |
+| Local demonstrator (web/) | Static HTML/JavaScript | Browser-only generic threshold examples, session counters and unsigned JSON export |
+| Audit chain (agents/base.py) | Python process | HMAC-SHA256 linked records with signature re-verification |
 
----
+The two Python engines are separate. The browser demo does not execute Python or communicate with the backend.
 
-## 📖 What It Does
+## Clinical and technical limitations
 
-**Radflow Sentinel** is an advanced analytical and computational platform implementing multi-agent consensus evaluation for radiology and neuroimaging systems. It provides:
+- Keyword matching is **not validated clinical NLP**. Negation recognition is heuristic; historical, uncertain, or irrelevant mentions can still trigger alerts and true findings may be missed.
+- Pulmonary nodule suggestions are conditional illustrations, not a complete implementation of Fleischner eligibility, solid/subsolid, single/multiple nodule, or risk-stratification requirements. Dates represent **suggested follow-up**, not actual scheduled appointments.
+- Low-eGFR alerts are prompts for professional contrast protocol review, not treatment instructions.
+- Regex-based identifier checks do **not** establish de-identification, HIPAA compliance, or zero-PHI guarantees.
+- The HMAC audit chain resides only in process memory. It cannot prove that an entire ledger has not been truncated or deleted and is not a persistent compliance record.
+- The repository does not provide live PACS/RIS connectivity, clinician notification, model inference, or real-time telemetry.
 
-- **Critical Finding Detection**: Automated identification of life-threatening findings (tension pneumothorax, acute PE, intracranial hemorrhage, aortic dissection, etc.)
-- **Incidentaloma Tracking**: Fleischner Society 2017 guideline-based follow-up scheduling for pulmonary nodules
-- **Contrast Safety Auditing**: eGFR-based contrast-induced nephropathy risk assessment
-- **Zero-PHI Outbound Guard**: Prevents protected health information from leaving the system
-- **Tamper-Evident Audit Trail**: HMAC-SHA256 chained cryptographic audit logging
+## Browser demonstrator
 
-All 10 tests passing.
+Open web/index.html in a current browser. The page evaluates example thresholds locally, with no network calls, storage, or external dependencies. Use only synthetic IDs. The JSON export is unsigned and is not a clinical audit record.
 
----
+The GitHub Pages workflow deploys the web/ directory when the repository's Pages source is set to GitHub Actions. The public Pages URL should only be used after the deployment has been verified.
 
-## ⚙️ Key Capabilities & Algorithmic Modules
+## Install and test
 
-- **Deterministic Calculation Engine**: Strict compliance with standard reference formulations and thresholds.
-- **Risk & Urgency Classification**: Multi-tier categorization with automated clinical/operational action recommendations.
-- **Validation & Guardrails**: Rigorous input bounds checking and anomaly detection.
-- **Multi-Agent Consensus**: InvariantQCWorker, SafetyEscalationWorker, and ProtocolConformanceWorker.
+Requires Python 3.9+; the JavaScript tests additionally need Node.js 20+.
 
----
+    git clone https://github.com/abusuraihsakhri/radflow-sentinel.git
+    cd radflow-sentinel
+    python -m pip install -e ".[api,dev]"
+    python -m pytest -q
+    node --check web/app.js
+    node --test tests/web.test.cjs
+    python -m compileall -q agents radflow cli.py
 
-## 💻 Installation
+## Radiology screening CLI
 
-```bash
-# Clone the repository
-git clone https://github.com/abusuraihsakhri/radflow-sentinel.git
-cd radflow-sentinel
+    radflow sample -o sample.json
+    radflow audit --report-json sample.json
+    radflow audit
+    radflow chat "What is the pulmonary nodule rule?"
+    radflow serve --host 127.0.0.1 --port 8004
 
-# Install dependencies
-pip install fastapi uvicorn pydantic pytest
-```
+The radiology API provides GET /health, POST /api/reports/audit and POST /api/chat. The sample contains fictional data.
 
----
+## Generic audit CLI
 
-## 💻 CLI Quickstart & Usage
+    python cli.py audit --task-id TEST-001 --target TARGET-001 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
+    python cli.py batch -i input.csv -o results.csv
+    python cli.py verify-audit
+    python cli.py serve --host 127.0.0.1 --port 8000
 
-### 1. Run a Single Audit
-```bash
-python cli.py audit --task-id TASK-001 --target KEY-01 --primary 28.5 --secondary 14.2 --critical --status DISCORDANT
-```
+Example batch CSV columns: task_id, target_identifier, primary_metric, secondary_metric, status_descriptor, is_critical_flag.
 
-### 2. Query the Supervisor Chat
-```bash
-python cli.py chat "What are the Fleischner Society rules?"
-```
+Generic API routes: GET /health, GET /metrics, POST /api/audit, POST /api/chat, GET /api/audit/logs. The /metrics route returns JSON rather than Prometheus exposition text. The generic thresholds (primary >25, secondary >12) are arbitrary software-test rules, **not radiology standards**.
 
-### 3. Batch Process CSV Records
-```bash
-python cli.py batch -i input.csv -o results.csv
-```
+## Security and Docker
 
-### 4. Verify Audit Trail Integrity
-```bash
-python cli.py verify-audit
-```
+Set RADFLOW_API_TOKEN to enable Bearer token authentication for API routes, using the Authorization HTTP header. The CLIs refuse non-loopback binds without a token. Directly binding the ASGI app with a third-party server can bypass the CLI check and must not be done without appropriate access control. A production system additionally needs TLS, durable logging, authorization, privacy review and operational controls.
 
-### 5. Launch FastAPI REST Server
-```bash
-python cli.py serve --host 127.0.0.1 --port 8000
-```
+Set a long random AUDIT_SECRET_KEY for repeatable signature verification during a process lifetime. Without it, a random per-process key is generated. Setting a key does not make the log persistent.
 
-### Parameter Reference
-- `--task-id`: Unique task / case identifier
-- `--target`: Entity, patient key, or target identifier
-- `--primary`: Primary domain measurement or score (float)
-- `--secondary`: Secondary kinetic or confidence score (float)
-- `--critical`: Flag for emergency escalation (boolean)
-- `--status`: Status code or phenotype descriptor (e.g., NOMINAL, DISCORDANT_ANOMALY)
+    cp .env.example .env
+    # Edit .env: set long, unique secrets for both required variables.
+    docker compose up --build
+    curl http://127.0.0.1:8000/health
 
----
+Docker Compose binds localhost by default and requires both secrets. Never commit .env.
 
-## 🛡️ Security & Enterprise Architecture
+## Technology, compatibility and license
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
+Python, Pydantic v2, optional FastAPI/Uvicorn, HTML/CSS/vanilla JavaScript, Node's built-in test runner, GitHub Actions. The browser page is designed for current Chromium, Firefox and Safari, without external fonts or scripts. The API's autogenerated /docs reflects the live schema; the checked-in openapi_spec.json is a legacy snapshot.
 
-### Security Configuration
-
-**IMPORTANT**: Set the `AUDIT_SECRET_KEY` environment variable in production to ensure consistent audit trail signing across restarts:
-
-```bash
-# Linux/macOS
-export AUDIT_SECRET_KEY=$(python -c "import secrets; print(secrets.token_hex(32))")
-
-# Windows PowerShell
-$env:AUDIT_SECRET_KEY = -join ((65..90) + (97..122) + (48..57) | Get-Random -Count 64 | % {[char]$_})
-```
-
-If not set, a random key is generated per session (suitable for development only).
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
-
-```bash
-pytest -v
-```
-
-Execute high-throughput batch simulation benchmarks:
-
-```bash
-python simulator.py 100
-```
-
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t radflow-sentinel .
-docker run -p 8000:8000 -e AUDIT_SECRET_KEY=your-secret-key radflow-sentinel
-```
-
-Or using Docker Compose:
-
-```bash
-# Set your production key
-export AUDIT_SECRET_KEY=your-secret-key
-docker-compose up -d
-```
-
----
-
-## 📁 Project Structure
-
-```
-radflow-sentinel/
-├── agents/              # Core agent modules (supervisor, workers, security)
-│   ├── api.py           # FastAPI REST endpoints
-│   ├── base.py          # PHI guard, HMAC audit trail, security
-│   ├── models.py        # Pydantic data models
-│   ├── supervisor.py    # Multi-agent orchestrator
-│   ├── workers.py       # Specialized evaluation workers
-│   ├── llm_factory.py   # LLM provider abstraction
-│   ├── metrics.py       # Prometheus metrics collector
-│   ├── learning.py      # Bayesian calibration engine
-│   └── streamer.py      # WebSocket telemetry broadcaster
-├── radflow/             # Radiology-specific modules
-│   ├── agents.py        # Critical finding, incidentaloma, contrast safety agents
-│   ├── models.py        # Radiology data models
-│   ├── cli.py           # Radiology CLI interface
-│   └── server.py        # Radiology FastAPI server
-├── tests/               # Pytest test suite
-├── web/                 # Operations console (HTML/JS)
-├── cli.py               # Main CLI entry point
-├── simulator.py         # High-throughput simulation
-├── enrichment.py        # Domain enrichment engines
-├── Dockerfile           # Container build
-├── docker-compose.yml   # Container orchestration
-└── pyproject.toml       # Project configuration
-```
+[MIT License](LICENSE).
