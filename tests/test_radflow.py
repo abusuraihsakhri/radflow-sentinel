@@ -134,3 +134,18 @@ def test_urgent_contrast_warning_is_not_routine():
     )
     dossier = SentinelCoordinator().audit_report(rep)
     assert dossier["overall_status"] == "URGENT_REVIEW_REQUIRED"
+
+def test_radiology_api_bearer_authorization(monkeypatch):
+    from fastapi.testclient import TestClient
+    from radflow.server import create_app
+
+    monkeypatch.setenv("RADFLOW_API_TOKEN", "local-test-token")
+    app = create_app()
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
+        assert client.post("/api/chat", json={"query": "test"}).status_code == 401
+        response = client.post(
+            "/api/chat", json={"query": "test"},
+            headers={"Authorization": "Bearer local-test-token"},
+        )
+        assert response.status_code == 200
