@@ -13,6 +13,17 @@ from .models import (
     IncidentalTrackingEntry,
 )
 
+def _is_negated(text: str, start: int) -> bool:
+    """Avoid obvious negative findings; this is not clinical NLP validation."""
+    prefix = text[max(0, start - 100):start].lower()
+    prefix = re.split(r"[.;\n]|\b(?:but|however|although)\b", prefix)[-1]
+    return bool(re.search(
+        r"\b(?:no|without|negative\s+for|absence\s+of|free\s+of|"
+        r"ruled\s+out|excluded)\b(?:\W+\w+){0,6}\W*$",
+        prefix
+    ))
+
+
 CRITICAL_FINDING_PATTERNS = [
     (r"\b(tension\s+pneumothorax|large\s+pneumothorax)\b", "Tension / Large Pneumothorax", "Stat chest tube thoracostomy evaluation; immediate verbal notification."),
     (r"\b(pulmonary\s+embolism|pulmonary\s+embolus|saddle\s+embolus|acute\s+pe)\b", "Acute Pulmonary Embolism", "Immediate anticoagulation / thrombectomy triage; closed-loop verbal communication within 30 min."),
@@ -33,7 +44,7 @@ class AcuteCriticalFinderAgent:
 
         for pattern, finding_title, action in CRITICAL_FINDING_PATTERNS:
             match = re.search(pattern, combined_text)
-            if match:
+            if match and not _is_negated(combined_text, match.start()):
                 alerts.append(
                     SentinelAlert(
                         alert_id=str(uuid.uuid4())[:8],
@@ -59,8 +70,16 @@ class IncidentalomaTrackerAgent:
         combined_text = f"{report.findings_text} {report.impression_text}".lower()
 
         # Pulmonary nodule detection (Fleischner 2017)
-        nodule_match = re.search(r"(\d+)\s*(?:-\s*(\d+))?\s*mm\s*(?:pulmonary|lung|subpleural)?\s*nodule", combined_text)
-        if nodule_match:
+        nodule_match = re.search(
+            r"\b(\d+(?:\.\d+)?)\s*mm\b"
+            r"(?:[\s-]+(?:solid|non-calcified|noncalcified|pulmonary|lung|"
+            r"subpleural|right|left|upper|middle|lower|lobe|solitary|single)){0,7}"
+            r"\s+nodule\b",
+            combined_text,
+        )
+        nearby = combined_text[max(0, nodule_match.start() - 90):nodule_match.end() + 100] if nodule_match else ""
+        pulmonary_context = bool(re.search(r"\b(?:lung|pulmonary|pleural|lobe|chest)\b", nearby)) or "chest" in report.exam_type.lower()
+        if nodule_match and pulmonary_context and not _is_negated(combined_text, nodule_match.start()):
             size_mm = float(nodule_match.group(1))
             if size_mm < 6.0:
                 interval_mo = 12
@@ -75,8 +94,11 @@ class IncidentalomaTrackerAgent:
                 desc = f"Large pulmonary nodule (>8 mm, measure: {size_mm:.0f} mm)"
                 rec = "Consider CT at 3 months, PET-CT, or tissue biopsy per Fleischner 2017."
 
-            now = datetime.datetime.now(datetime.timezone.utc)
-            target_date = (now + datetime.timedelta(days=interval_mo * 30)).strftime("%Y-%m-%d")
+            try:
+                study_date = datetime.datetime.fromisoformat(report.study_datetime.replace("Z", "+00:00"))
+            except (TypeError, ValueError):
+                study_date = datetime.datetime.now(datetime.timezone.utc)
+            target_date = (study_date + datetime.timedelta(days=interval_mo * 30)).strftime("%Y-%m-%d")
 
             incidental_entry = IncidentalTrackingEntry(
                 organ_system="Lung",
@@ -111,6 +133,8 @@ class ContrastSafetyAuditorAgent:
     def evaluate(self, report: RadiologyReport) -> List[SentinelAlert]:
         alerts = []
         if "contrast" in report.exam_type.lower() and report.patient_egfr is not None:
+            if not 0 <= report.patient_egfr <= 200:
+                raise ValueError("patient_egfr must be within 0–200 mL/min/1.73 m²")
             if report.patient_egfr < 30.0:
                 alerts.append(
                     SentinelAlert(
@@ -118,10 +142,10 @@ class ContrastSafetyAuditorAgent:
                         report_id=report.report_id,
                         patient_id=report.patient_id,
                         urgency=FindingUrgency.URGENT_NON_CRITICAL,
-                        title="Contrast-Induced Nephropathy (CIN) / NSF Safety Warning",
+                        title="Low eGFR: Contrast Protocol Review",
                         clinical_finding=f"Patient eGFR is {report.patient_egfr:.1f} mL/min/1.73m² on contrast examination.",
                         closed_loop_required=False,
-                        remediation_action="Ensure post-scan IV hydration; monitor repeat creatinine at 48 hours; withhold metformin if prescribed.",
+                        remediation_action="Review contrast agent, acute kidney injury status, patient-specific risk, and current institutional/ACR contrast protocols; do not automatically withhold therapy.",
                     )
                 )
         return alerts
@@ -144,6 +168,7 @@ class SentinelCoordinator:
         all_alerts.extend(self.contrast_agent.evaluate(report))
 
         has_stat = any(a.urgency == FindingUrgency.STAT_RED_ALERT for a in all_alerts)
+        has_urgent = any(a.urgency == FindingUrgency.URGENT_NON_CRITICAL for a in all_alerts)
         has_incidental = any(a.urgency == FindingUrgency.INCIDENTAL_FOLLOWUP for a in all_alerts)
 
         dossier = {
@@ -151,7 +176,10 @@ class SentinelCoordinator:
             "accession_number": report.accession_number,
             "patient_id": report.patient_id,
             "exam_type": report.exam_type,
-            "overall_status": "STAT_CRITICAL_ALERT" if has_stat else ("INCIDENTAL_TRACKING_ACTIVE" if has_incidental else "ROUTINE_NORMAL"),
+            "overall_status": ("STAT_CRITICAL_ALERT" if has_stat else
+                               "URGENT_REVIEW_REQUIRED" if has_urgent else
+                               "INCIDENTAL_TRACKING_ACTIVE" if has_incidental else
+                               "ROUTINE_NORMAL"),
             "closed_loop_notification_required": has_stat,
             "total_alerts": len(all_alerts),
             "alerts": [
