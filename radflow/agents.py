@@ -3,6 +3,7 @@ RadFlow Sentinel Distributed Component Radiology Escalation & Incidentaloma Hier
 """
 
 import re
+import math
 import uuid
 import datetime
 from typing import List, Dict, Any, Optional
@@ -25,10 +26,10 @@ def _is_negated(text: str, start: int) -> bool:
 
 
 CRITICAL_FINDING_PATTERNS = [
-    (r"\b(tension\s+pneumothorax|large\s+pneumothorax)\b", "Tension / Large Pneumothorax", "Stat chest tube thoracostomy evaluation; immediate verbal notification."),
-    (r"\b(pulmonary\s+embolism|pulmonary\s+embolus|saddle\s+embolus|acute\s+pe)\b", "Acute Pulmonary Embolism", "Immediate anticoagulation / thrombectomy triage; closed-loop verbal communication within 30 min."),
+    (r"\b(tension\s+pneumothorax|large\s+pneumothorax)\b", "Tension / Large Pneumothorax", "Immediate clinical assessment and closed-loop notification per local protocol."),
+    (r"\b(pulmonary\s+embolism|pulmonary\s+embolus|saddle\s+embolus|acute\s+pe)\b", "Acute Pulmonary Embolism", "Urgent clinical evaluation and direct closed-loop notification per local critical-result protocol."),
     (r"\b(intracranial\s+hemorrhage|subdural\s+hematoma|subarachnoid\s+hemorrhage|epidural\s+hematoma|intracerebral\s+hemorrhage)\b", "Acute Intracranial Hemorrhage", "Urgent neurosurgical consultation and blood pressure / reversal management."),
-    (r"\b(aortic\s+dissection|intramural\s+hematoma\s+aorta)\b", "Acute Aortic Dissection", "Immediate cardiovascular surgery notification and impulse control (esmolol/nitroprusside)."),
+    (r"\b(aortic\s+dissection|intramural\s+hematoma\s+aorta)\b", "Acute Aortic Dissection", "Urgent specialist evaluation and direct closed-loop notification per local protocol."),
     (r"\b(pneumoperitoneum|free\s+intraperitoneal\s+air|perforated\s+viscus)\b", "Pneumoperitoneum / Viscus Perforation", "Emergency surgical consult for exploratory laparotomy/laparoscopy."),
     (r"\b(testicular\s+torsion|ovarian\s+torsion)\b", "Acute Gonadal Torsion", "Immediate urology / gynecology emergent operative detorsion."),
 ]
@@ -115,7 +116,7 @@ class IncidentalomaTrackerAgent:
                     report_id=report.report_id,
                     patient_id=report.patient_id,
                     urgency=FindingUrgency.INCIDENTAL_FOLLOWUP,
-                    title=f"Incidental Lung Nodule Follow-Up Scheduled ({size_mm:.0f} mm)",
+                    title=f"Incidental Lung Nodule: Follow-Up Review ({size_mm:.0f} mm)",
                     clinical_finding=desc,
                     closed_loop_required=False,
                     remediation_action=rec,
@@ -133,7 +134,7 @@ class ContrastSafetyAuditorAgent:
     def evaluate(self, report: RadiologyReport) -> List[SentinelAlert]:
         alerts = []
         if "contrast" in report.exam_type.lower() and report.patient_egfr is not None:
-            if not 0 <= report.patient_egfr <= 200:
+            if not math.isfinite(report.patient_egfr) or not 0 <= report.patient_egfr <= 200:
                 raise ValueError("patient_egfr must be within 0–200 mL/min/1.73 m²")
             if report.patient_egfr < 30.0:
                 alerts.append(
@@ -211,6 +212,6 @@ class SentinelCoordinator:
         if "fleischner" in q or "nodule" in q:
             return "Fleischner Society 2017: Solid single nodules <6 mm require no routine follow-up in low-risk patients; 6-8 mm nodules require CT at 6-12 months; >8 mm nodules require CT at 3 months, PET-CT, or biopsy."
         elif "critical" in q or "red alert" in q:
-            return "STAT Red Alerts (Tension PTX, Acute PE, Intracranial Bleed, Aortic Dissection, Free Air) require direct verbal read-back to the ordering clinician within 30 minutes per Joint Commission standards."
+            return "Example critical findings warrant immediate closed-loop communication in accordance with the institution's escalation protocol; this keyword screener cannot determine clinical urgency reliably."
         else:
             return "RadFlow Sentinel standing by. Real-time surveillance active across PACS/RIS diagnostic reports."
