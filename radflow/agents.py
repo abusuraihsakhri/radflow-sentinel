@@ -4,6 +4,7 @@ RadFlow Sentinel Distributed Component Radiology Escalation & Incidentaloma Hier
 
 import re
 import math
+import calendar
 import uuid
 import datetime
 from typing import List, Dict, Any, Optional
@@ -13,6 +14,15 @@ from .models import (
     FindingUrgency,
     IncidentalTrackingEntry,
 )
+
+def _add_months(date_value: datetime.datetime, months: int) -> datetime.datetime:
+    """Add calendar months, clamping at the destination month's last day."""
+    month_index = date_value.month - 1 + months
+    year = date_value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(date_value.day, calendar.monthrange(year, month)[1])
+    return date_value.replace(year=year, month=month, day=day)
+
 
 def _is_negated(text: str, start: int) -> bool:
     """Avoid obvious negative findings; this is not clinical NLP validation."""
@@ -99,7 +109,7 @@ class IncidentalomaTrackerAgent:
                 study_date = datetime.datetime.fromisoformat(report.study_datetime.replace("Z", "+00:00"))
             except (TypeError, ValueError):
                 study_date = datetime.datetime.now(datetime.timezone.utc)
-            target_date = (study_date + datetime.timedelta(days=interval_mo * 30)).strftime("%Y-%m-%d")
+            target_date = _add_months(study_date, interval_mo).strftime("%Y-%m-%d")
 
             incidental_entry = IncidentalTrackingEntry(
                 organ_system="Lung",
