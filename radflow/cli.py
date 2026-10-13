@@ -4,6 +4,7 @@ CLI for RadFlow Sentinel.
 
 import argparse
 import json
+import os
 import sys
 from .models import RadiologyReport
 from .agents import SentinelCoordinator
@@ -51,6 +52,7 @@ def main(argv=None):
     # Serve command
     serve_parser = subparsers.add_parser("serve", help="Launch FastAPI REST server")
     serve_parser.add_argument("--port", type=int, default=8004, help="Port")
+    serve_parser.add_argument("--host", default="127.0.0.1", help="Bind address")
 
     args = parser.parse_args(argv)
     coordinator = SentinelCoordinator()
@@ -110,6 +112,17 @@ def main(argv=None):
                 print(f"  -> Incidental Schedule: {fol['organ']} | Due: {fol['target_date']} ({fol['interval_months']} mo) | Standard: {fol['guideline']}")
 
         print("\n" + "=" * 80)
+        return 0
+
+    if args.command == "serve":
+        if args.host not in ("127.0.0.1", "localhost", "::1") and not os.getenv("RADFLOW_API_TOKEN"):
+            parser.error("RADFLOW_API_TOKEN is required for non-loopback API binding")
+        from .server import create_app
+        import uvicorn
+        app = create_app()
+        if app is None:
+            parser.error("FastAPI and Pydantic must be installed: pip install -e '.[api]'")
+        uvicorn.run(app, host=args.host, port=args.port)
         return 0
 
     if args.command == "chat":
