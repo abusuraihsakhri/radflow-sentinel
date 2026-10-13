@@ -4,6 +4,7 @@ Command Line Interface for Radflow Sentinel.
 import argparse
 import csv
 import json
+import os
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
@@ -115,6 +116,8 @@ def main(argv=None):
         return 0
 
     if args.command == "serve":
+        if args.host not in ("127.0.0.1", "localhost", "::1") and not os.getenv("RADFLOW_API_TOKEN"):
+            parser.error("RADFLOW_API_TOKEN is required when binding the API to a non-loopback interface")
         import uvicorn
         from agents.api import app
         print(f"Starting Radflow Sentinel API server on http://{args.host}:{args.port}")

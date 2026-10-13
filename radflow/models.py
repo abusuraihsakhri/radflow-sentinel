@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Dict, List, Optional, Any
 import datetime
+import math
 
 
 class FindingUrgency(str, Enum):
@@ -26,6 +27,14 @@ class RadiologyReport:
     patient_egfr: Optional[float] = None
     ordering_provider: str = "Dr. Clinical Provider"
     study_datetime: str = field(default_factory=lambda: datetime.datetime.now(datetime.timezone.utc).isoformat())
+
+    def __post_init__(self) -> None:
+        if self.patient_egfr is not None:
+            if (isinstance(self.patient_egfr, bool)
+                or not isinstance(self.patient_egfr, (int, float))
+                or not math.isfinite(self.patient_egfr)
+                or not 0 <= self.patient_egfr <= 200):
+                raise ValueError("patient_egfr must be a finite number in the range 0–200")
 
 
 @dataclass
