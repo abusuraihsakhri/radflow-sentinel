@@ -147,3 +147,21 @@ def test_audit_trail_uses_env_var_when_set():
             os.environ.pop("AUDIT_SECRET_KEY", None)
         else:
             os.environ["AUDIT_SECRET_KEY"] = old_key
+
+def test_audit_tampering_is_detected():
+    trail = AuditTrail(secret_key="test-only-secret")
+    entry = trail.log("tester", "supervisor", "AUDIT", {"task_id": "SAFE-01"})
+    assert trail.verify_integrity()
+    entry["payload_hash"] = "changed"
+    assert trail.verify_integrity()  # Returned entry is a copy.
+    snapshot = trail.get_trail()
+    snapshot[0]["payload_hash"] = "changed"
+    assert trail.verify_integrity()  # Returned trail is a copy.
+    trail.logs[0]["payload_hash"] = "changed"
+    assert not trail.verify_integrity()  # Authenticating each block catches edits.
+
+
+def test_audit_rejects_phi_in_signed_fields():
+    trail = AuditTrail(secret_key="test-only-secret")
+    with pytest.raises(SecurityException):
+        trail.log("Patient MRN-995577", "supervisor", "AUDIT", {})
