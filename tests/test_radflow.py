@@ -84,3 +84,53 @@ def test_sentinel_coordinator():
 def test_cli():
     assert main(["audit"]) == 0
     assert main(["chat", "What", "is", "a", "critical", "finding?"]) == 0
+
+def test_negative_critical_finding_is_not_alerted():
+    rep = RadiologyReport(
+        report_id="R-NEG", accession_number="A-NEG", patient_id="P-NEG",
+        exam_type="CT Chest", findings_text="No evidence of pulmonary embolism.",
+        impression_text="No pulmonary embolism and no large pneumothorax.",
+    )
+    assert AcuteCriticalFinderAgent().evaluate(rep) == []
+
+
+def test_mixed_negated_and_positive_findings():
+    rep = RadiologyReport(
+        report_id="R-MIX", accession_number="A-MIX", patient_id="P-MIX",
+        exam_type="CT Chest", findings_text="No pulmonary embolism but aortic dissection is present.",
+        impression_text="Aortic dissection.",
+    )
+    alerts = AcuteCriticalFinderAgent().evaluate(rep)
+    assert any("Dissection" in alert.title for alert in alerts)
+    assert not any("Embolism" in alert.title for alert in alerts)
+
+
+def test_sample_solid_nodule_detection_and_study_date():
+    rep = RadiologyReport(
+        report_id="R-NOD", accession_number="A-NOD", patient_id="P-NOD",
+        exam_type="CT Chest", findings_text="Incidental 7 mm solid non-calcified nodule in the right upper lobe.",
+        impression_text="", study_datetime="2025-01-01T00:00:00+00:00",
+    )
+    alerts = IncidentalomaTrackerAgent().evaluate(rep)
+    assert len(alerts) == 1
+    assert alerts[0].incidental_tracking.recommended_interval_months == 6
+    assert alerts[0].incidental_tracking.target_followup_date == "2025-06-30"
+
+
+def test_negative_nodule_and_nonlung_nodule_not_tracked():
+    rep = RadiologyReport(
+        report_id="R-THY", accession_number="A-THY", patient_id="P-THY",
+        exam_type="CT Neck", findings_text="No 6 mm pulmonary nodule. 6 mm thyroid nodule.",
+        impression_text="",
+    )
+    assert IncidentalomaTrackerAgent().evaluate(rep) == []
+
+
+def test_urgent_contrast_warning_is_not_routine():
+    rep = RadiologyReport(
+        report_id="R-LOW", accession_number="A-LOW", patient_id="P-LOW",
+        exam_type="CT with IV Contrast", findings_text="No acute abnormality.",
+        impression_text="Normal.", patient_egfr=20,
+    )
+    dossier = SentinelCoordinator().audit_report(rep)
+    assert dossier["overall_status"] == "URGENT_REVIEW_REQUIRED"
