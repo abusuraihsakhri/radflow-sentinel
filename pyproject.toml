@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "radflow-sentinel"
 version = "1.0.0"
-description = "Autonomous Radiology Critical Finding Escalation & Incidentaloma Tracking Engine System."
+description = "Experimental radiology report screening and deterministic audit utilities."
 readme = "README.md"
 authors = [{ name = "Dr. Abu Suraih Sakhri", email = "abusuraih@example.com" }]
 license = { text = "MIT" }
@@ -16,7 +16,13 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Medical Science Apps.",
 ]
 requires-python = ">=3.9"
-dependencies = []
+dependencies = [
+    "pydantic>=2.5,<3",
+]
+
+[project.optional-dependencies]
+api = ["fastapi>=0.110,<1", "uvicorn>=0.27,<1"]
+dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
 
 [project.scripts]
 radflow = "radflow.cli:main"
@@ -24,3 +30,6 @@ radflow = "radflow.cli:main"
 [project.urls]
 Homepage = "https://github.com/abusuraihsakhri/radflow-sentinel"
 Repository = "https://github.com/abusuraihsakhri/radflow-sentinel.git"
+
+[tool.setuptools.packages.find]
+include = ["agents*", "radflow*"]
