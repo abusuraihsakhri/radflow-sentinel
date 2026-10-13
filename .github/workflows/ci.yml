@@ -39,11 +39,10 @@ jobs:
       run: |
         pytest -v
 
-    - name: Security SAST & Zero-PHI Audit
+    - name: Audit chain smoke check
       run: |
         python -c "
         from agents.base import PHIGuard, AuditLogger
-        import pytest
         assert AuditLogger.verify_integrity() is True
-        print('Security & Zero-PHI Audit Passed!')
+        print('In-process audit chain smoke check passed')
         "
