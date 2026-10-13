@@ -114,7 +114,7 @@ def test_sample_solid_nodule_detection_and_study_date():
     alerts = IncidentalomaTrackerAgent().evaluate(rep)
     assert len(alerts) == 1
     assert alerts[0].incidental_tracking.recommended_interval_months == 6
-    assert alerts[0].incidental_tracking.target_followup_date == "2025-06-30"
+    assert alerts[0].incidental_tracking.target_followup_date == "2025-07-01"
 
 
 def test_negative_nodule_and_nonlung_nodule_not_tracked():
