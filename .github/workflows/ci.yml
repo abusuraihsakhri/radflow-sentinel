@@ -24,7 +24,16 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install fastapi uvicorn pydantic pytest
+        pip install -e ".[api,dev]"
+
+    - name: Run JavaScript demonstrator tests
+      run: |
+        node --check web/app.js
+        node --test tests/web.test.cjs
+
+    - name: Verify Python packaging
+      run: |
+        python -c "import agents, radflow; from agents.models import SystemTaskPayload; assert SystemTaskPayload(task_id='T1',target_identifier='S1',primary_metric=1.0)"
 
     - name: Run Pytest Suite
       run: |
